@@ -2,12 +2,15 @@ import os
 import numpy as np
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, 
-    QFileDialog, QMessageBox, QLabel
+    QFileDialog, QMessageBox, QLabel, QInputDialog
 )
 from PyQt6.QtGui import QPixmap, QImage, QFont
 from PyQt6.QtCore import Qt
 from ui.image_canvas import ImageCanvas
 from core.analyzer import ImageAnalyzer
+
+
+WINDOW_REGISTRY = []
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -15,8 +18,10 @@ class MainWindow(QMainWindow):
         self.analyzer = ImageAnalyzer()
         self.canvas = ImageCanvas()
         self.next_roi_id = 1
+        self.supported_extensions = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.tif'}
         
         self.setup_ui()
+        self.setAcceptDrops(True)
         self.canvas.set_roi_added_callback(self.on_roi_added)
 
     def setup_ui(self):
@@ -153,11 +158,103 @@ class MainWindow(QMainWindow):
             self, "이미지 파일 열기", "", "Images (*.png *.jpg *.jpeg *.bmp *.tiff)"
         )
         if file_path:
-            if self.analyzer.load_image(file_path):
-                self.canvas.set_image(self.analyzer.image)
-                self.clear_rois()
-            else:
-                QMessageBox.warning(self, "오류", "이미지 파일을 불러올 수 없습니다.")
+            self.load_image_file(file_path)
+
+    def load_image_file(self, file_path):
+        if self.analyzer.load_image(file_path):
+            self.canvas.set_image(self.analyzer.image)
+            self.clear_rois()
+            self.setWindowTitle(f"Image Analyzer - {os.path.basename(file_path)}")
+            return True
+
+        QMessageBox.warning(self, "오류", "이미지 파일을 불러올 수 없습니다.")
+        return False
+
+    def dragEnterEvent(self, event):
+        if self._get_dropped_image_paths(event.mimeData()):
+            self.canvas.set_drop_highlight(True)
+            event.acceptProposedAction()
+            return
+        self.canvas.set_drop_highlight(False)
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        if self._get_dropped_image_paths(event.mimeData()):
+            self.canvas.set_drop_highlight(True)
+            event.acceptProposedAction()
+            return
+        self.canvas.set_drop_highlight(False)
+        event.ignore()
+
+    def dragLeaveEvent(self, event):
+        self.canvas.set_drop_highlight(False)
+        event.accept()
+
+    def dropEvent(self, event):
+        self.canvas.set_drop_highlight(False)
+        file_paths = self._get_dropped_image_paths(event.mimeData())
+        if not file_paths:
+            event.ignore()
+            return
+
+        selected_path = self._select_dropped_image_path(file_paths)
+        if not selected_path:
+            event.ignore()
+            return
+
+        new_window = self.open_image_in_new_window(selected_path)
+        if new_window is not None:
+            event.acceptProposedAction()
+            return
+        event.ignore()
+
+    def _get_dropped_image_paths(self, mime_data):
+        if not mime_data.hasUrls():
+            return []
+
+        file_paths = []
+
+        for url in mime_data.urls():
+            local_file = url.toLocalFile()
+            if not local_file or not os.path.isfile(local_file):
+                continue
+
+            if os.path.splitext(local_file)[1].lower() in self.supported_extensions:
+                file_paths.append(local_file)
+
+        return file_paths
+
+    def _select_dropped_image_path(self, file_paths):
+        if len(file_paths) == 1:
+            return file_paths[0]
+
+        items = [os.path.basename(path) for path in file_paths]
+        selected_name, ok = QInputDialog.getItem(
+            self,
+            "드롭한 파일 선택",
+            "열 이미지를 선택하세요:",
+            items,
+            0,
+            False
+        )
+        if not ok:
+            return None
+
+        selected_index = items.index(selected_name)
+        return file_paths[selected_index]
+
+    def open_image_in_new_window(self, file_path):
+        new_window = MainWindow()
+        if not new_window.load_image_file(file_path):
+            new_window.deleteLater()
+            return None
+
+        new_window.move(self.x() + 40, self.y() + 40)
+        new_window.show()
+        new_window.raise_()
+        new_window.activateWindow()
+        WINDOW_REGISTRY.append(new_window)
+        return new_window
 
     def set_mode(self, mode):
         self.canvas.set_mode(mode)

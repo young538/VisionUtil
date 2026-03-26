@@ -8,6 +8,7 @@ class ImageCanvas(QWidget):
         super().__init__(parent)
         self.image = None
         self.qpixmap = None
+        self.drop_highlight = False
         
         self.scale_factor = 1.0
         self.pan_offset = QPoint(0, 0)
@@ -68,6 +69,11 @@ class ImageCanvas(QWidget):
         
         # [v1.3 추가기능] VS Code 에디터 영역과 동일한 극다크 그레이 적용
         painter.fillRect(self.rect(), QColor(30, 30, 30)) 
+
+        if self.drop_highlight:
+            painter.setPen(QPen(QColor(0, 122, 204), 3, Qt.PenStyle.DashLine))
+            painter.setBrush(QColor(0, 122, 204, 35))
+            painter.drawRect(self.rect().adjusted(6, 6, -6, -6))
         
         if self.qpixmap is None: return
             
@@ -227,4 +233,10 @@ class ImageCanvas(QWidget):
             
     def clear_rois(self):
         self.rois.clear()
+        self.update()
+
+    def set_drop_highlight(self, enabled):
+        if self.drop_highlight == enabled:
+            return
+        self.drop_highlight = enabled
         self.update()

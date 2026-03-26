@@ -2,9 +2,13 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from ui.main_window import MainWindow
 
+
+WINDOWS = []
+
 def main():
     app = QApplication(sys.argv)
     window = MainWindow()
+    WINDOWS.append(window)
     window.show()
     sys.exit(app.exec())
 
